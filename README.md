@@ -3,10 +3,14 @@
 **A sysl application on Android. Clone it, change two lines, write your program.**
 
 ```
-git clone https://github.com/sysl-lang/skitter-app myapp
+skitter init myapp --id com.example.myapp --name "My App"
 cd myapp
-./skitter run
+skitter run
 ```
+
+`skitter` is [the command](https://github.com/sysl-lang/skitter-cli), and `init` writes this project
+with your two names already in it. **You can also just clone this repository** and edit those two
+lines yourself — it is an ordinary Gradle project and nothing here depends on the tool.
 
 Then open `gradle.properties` and set the only two things that are yours:
 
@@ -26,7 +30,7 @@ You need Android Studio's SDK with the **NDK** and **CMake** installed (SDK Mana
 **`sbt`** on the path, and a **JDK between 17 and 25**.
 
 ```
-./skitter run
+skitter run
 ```
 
 builds, installs, launches, and follows the log. It is the whole loop, and it sets up its own
@@ -37,16 +41,15 @@ CMake toolchain error.
 
 | | |
 |---|---|
-| `./skitter run` | build, install, launch, follow the log |
-| `./skitter build` | just the debug APK |
-| `./skitter install` | install what was last built |
-| `./skitter log` | follow a running app's output |
-| `./skitter release` | a release APK, signed if you have a key |
-| `./skitter clean` | Gradle's output and sbt's |
+| `skitter run` | build, install, launch, follow the log |
+| `skitter build` | just the debug APK |
+| `skitter install` | install what was last built |
+| `skitter log` | follow a running app's output |
+| `skitter release` | a release APK, signed if you have a key |
+| `skitter clean` | Gradle's output and sbt's |
 
-**It is a script in the repository rather than something to install**, for the same reason `gradlew`
-is one: a build you clone should not also need a tool fetched from somewhere else to drive it. Under
-it is `./gradlew assembleDebug` and `adb`, and either can be run by hand:
+**Nothing here needs it.** This is an ordinary Gradle project and the tool only drives it, so the
+same thing by hand is:
 
 ```
 export ANDROID_HOME=~/Library/Android/sdk
@@ -88,7 +91,7 @@ That is the demonstration, and it is deliberately small enough to delete.
 | **`gradle.properties`** | your application id and its name. **Two lines** |
 | **`program/main.sysl`** | your program |
 | **`program/package.hocon`** | what your program depends on |
-| everything else | Skitter's machinery — leave it, and drive it with `./skitter` |
+| everything else | Skitter's machinery — leave it |
 
 **The machinery is not left alone out of politeness.** Four things in it are load-bearing and silent
 when wrong, which is why they are somewhere you are not expected to look:
