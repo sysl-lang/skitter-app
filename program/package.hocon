@@ -1,0 +1,30 @@
+// Your program.
+//
+// **The `name` here is not what your application is called.** It is the sysl package's own name, it
+// appears nowhere a user of the app can see, and nothing reads it — the two names that matter are in
+// `gradle.properties`, one directory up. Leave it or change it; nothing depends on either answer.
+package {
+  name    = "program"
+  version = "0.1.0"
+
+  // Imports became transitive in 0.0.73, which is what lets the block below name one coordinate.
+  sysl = "0.0.73"
+}
+
+// **One coordinate.** Naming Skitter reaches SDL3 through it, because imports are transitive — so
+// this program never names SDL3 and there is nothing beside this repository for a build to be stale
+// against. Add what you need here; `sysl build-c` fetches it.
+//
+// For an interface rather than a drawing, add syslUI's SDL driver and the toolkit comes with it:
+//
+//     syslui-sdl { git = "github.com/sysl-lang/syslui-sdl", version = "0.1.0" }
+dependencies {
+  skitter { git = "github.com/sysl-lang/skitter", version = "0.1.0" }
+}
+
+// What SDL3 itself requires, restated because a program reaching a gated module has to say so too.
+// Android answers both: Bionic is POSIX, and `Os.Android` is in the compiler's POSIX set.
+requires {
+  heap  = true
+  posix = true
+}

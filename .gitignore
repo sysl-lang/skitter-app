@@ -1,0 +1,28 @@
+# SDL3's Android release, which `./fetch-sdl3.sh` downloads. 16 MB of binaries built against an NDK
+# and an API level somebody else chose — the org's rule against carrying a prebuilt `.so` in a
+# package, applied one level up.
+app/libs/*.aar
+
+# Gradle and AGP output.
+.gradle/
+build/
+app/build/
+app/.cxx/
+
+# sbt's, which is a second build system and therefore a second output directory. Ninety-one of its
+# files were committed before this line existed, which is the sort of thing nobody notices until
+# somebody clones the repository to start from.
+target/
+
+# Written by Android Studio when it opens the project, and holds `sdk.dir` — an absolute path into
+# somebody's home directory.
+local.properties
+
+# The IDE's own state.
+.idea/
+*.iml
+
+# What `sysl build-c` writes beside your program: the archive CMake links, and the C header that
+# describes what it exports. Both are build output that happens to land in a source directory.
+program/*.a
+program/*.a.h

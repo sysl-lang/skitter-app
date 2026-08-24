@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        No title bar and no status bar, which is SDL's own template's theme and is not a preference.
+        SDL draws into one surface and lays out its own contents from the size it is given; an action
+        bar over the top means the surface starts below it, so everything the program draws is offset
+        by a bar height it was never told about. Left out here at first, and the square in the demo
+        drew low on the screen for exactly that reason.
+    -->
+    <style name="AppTheme" parent="android:Theme.NoTitleBar.Fullscreen" />
+</resources>

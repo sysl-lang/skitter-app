@@ -1,0 +1,112 @@
+// Your application. This file is the one you rewrite; everything else in the repository is Skitter's
+// machinery, and the two names your project needs are in `gradle.properties`.
+//
+// **What it draws is the point of it**: the window in one colour, the part of the window the system
+// bars leave in another, and a square bouncing inside that. Run it on a phone and the darker border
+// along the top and bottom is the status bar and the navigation bar — the region a program laying
+// itself out against the window's own size would have drawn into and made unreadable.
+//
+// **There is one function, and its name is the only unusual thing here.** Android has no `main`:
+// `SDLActivity` loads `libmain.so` and looks up the symbol `SDL_main` in it, so what an Android
+// program needs is not an entry point that runs first but one the Java half can find — and `@export`
+// publishes exactly that. That is also why there is no C in this repository: every other SDL project
+// carries a shim defining `SDL_main` in C, and sysl defines the symbol directly.
+
+import sh.sysl.sdl3.*
+import sh.sysl.sdl3.{INIT_VIDEO, SCANCODE_ESCAPE}
+import sh.sysl.skitter.{orient, window_flags, safe_area}
+import sysl.math.min
+
+// **What the window is asked for, and not what it gets.** Android answers a size request with the
+// screen, so these matter only on a desktop, where this same file runs unchanged under `sysl run`.
+const WANTED_W: i32 = 400
+const WANTED_H: i32 = 800
+
+// Pixels per second, and the square's side. A speed in seconds rather than in frames is what makes
+// the motion the same on a 60 Hz phone and a 120 Hz one.
+const SPEED: f32 = 260.0
+const SIDE: f32 = 72.0
+
+sdl_main_body() -> i32
+    // **Before `init`, because a hint is read when the thing it configures is created** — and on
+    // Android the activity's orientation is settled during startup.
+    orient()
+
+    if !init(INIT_VIDEO)
+        return 1
+
+    // `window_flags()` folds in `WINDOW_RESIZABLE`, which is the other half of `orient` above: SDL
+    // only lets the device decide the orientation when the window is resizable, and without it a
+    // request taller than it is wide silently locks the app upright.
+    val window = create_window("skitter", WANTED_W, WANTED_H, window_flags()).expect("a window")
+    val renderer = window.create_renderer().expect("a renderer")
+
+    renderer.set_vsync(true)
+
+    var x = 40.0f32
+    var y = 40.0f32
+    var dx = SPEED
+    var dy = SPEED
+    var last = ticks()
+    var running = true
+
+    while running
+        loop
+            poll_event() match
+                Some(e) ->
+                    if e.kind() == EventKind.Quit then running = false
+                    elif e.kind() == EventKind.KeyDown && e.key_scancode() == SCANCODE_ESCAPE
+                        running = false
+                None -> break
+
+        // **Clamped, so that an app sent to the background does not come back with the square
+        // through a wall.** The elapsed time across a pause is however long somebody was reading
+        // their messages, and a single step that long moves further than the box is wide.
+        val now = ticks()
+        val dt = min(f32(now - last) / 1000.0, 0.05f32)
+
+        last = now
+
+        // **Asked every frame rather than once.** Both the drawable size and the bars change when the
+        // phone is turned, and a rectangle read at startup describes an orientation the program may
+        // no longer be in.
+        val safe = safe_area(renderer)
+
+        x += dx * dt
+        y += dy * dt
+
+        // **Turned around at the safe area's edges, not the window's** — which is the whole of what
+        // Skitter is for. On a phone the square visibly stops short of the top and bottom.
+        if x < safe.x
+            x = safe.x
+            dx = -dx
+
+        if y < safe.y
+            y = safe.y
+            dy = -dy
+
+        if x + SIDE > safe.x + safe.w
+            x = safe.x + safe.w - SIDE
+            dx = -dx
+
+        if y + SIDE > safe.y + safe.h
+            y = safe.y + safe.h - SIDE
+            dy = -dy
+
+        // The window, then the region the bars leave, then the square inside it.
+        renderer.clear_to(rgb(10, 11, 15))
+
+        renderer.set_draw_color(rgb(28, 31, 42))
+        renderer.fill_rect(safe.x, safe.y, safe.w, safe.h)
+
+        renderer.set_draw_color(rgb(120, 170, 255))
+        renderer.fill_rect(x, y, SIDE, SIDE)
+
+        renderer.present()
+
+    quit()
+    0
+end sdl_main_body
+
+@export("SDL_main")
+sdl_main(argc: i32, argv: **u8) -> i32 = sdl_main_body()
