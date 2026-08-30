@@ -88,10 +88,40 @@ That is the demonstration, and it is deliberately small enough to delete.
 
 | | |
 |---|---|
-| **`gradle.properties`** | your application id and its name. **Two lines** |
+| **`gradle.properties`** | your application id and its name. **Two lines** — and a third if you want more of SDL |
 | **`program/main.sysl`** | your program |
 | **`program/package.hocon`** | what your program depends on |
 | everything else | Skitter's machinery — leave it |
+
+### Text, images and sound
+
+SDL3 on its own draws, takes input, and plays nothing. The three companion libraries are one line
+here and one coordinate there — and **nothing in the machinery changes**, which is the point:
+
+```
+skitter.sdlLibraries=ttf image
+```
+
+```
+dependencies {
+  skitter    { git = "github.com/sysl-lang/skitter",    version = "0.1.0" }
+  sdl3-ttf   { git = "github.com/sysl-lang/sdl3-ttf",   version = "0.3.0" }
+  sdl3-image { git = "github.com/sysl-lang/sdl3-image", version = "0.1.0" }
+}
+```
+
+Then re-run `./fetch-sdl3.sh`, which downloads what you named. The CMake finds each one, links it,
+and hands sysl its headers; the versions are pinned in `fetch-sdl3.sh` beside SDL3's own, so a
+project is not silently on whatever was released this morning.
+
+**Each is a separate AAR and a separate sysl package, and that is not tidiness.** A link directive is
+never pruned, so one merged package would put `-lSDL3_ttf` on the link line of a program that only
+draws rectangles — the same argument that makes SDL3 four packages in this org rather than one.
+
+**For text specifically, check you need it first.** `renderer.debug_text(x, y, "…")` is in SDL3
+itself and needs no second AAR, no font file and no package: one size, one face, ASCII, no shaping.
+It is a debugging font by SDL's own description and scaling it up looks like scaling a bitmap up —
+but for a frame counter or a label it is free, and `sdl3-ttf` is 1.9 MB.
 
 **The machinery is not left alone out of politeness.** Four things in it are load-bearing and silent
 when wrong, which is why they are somewhere you are not expected to look:

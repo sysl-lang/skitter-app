@@ -11,6 +11,11 @@ plugins {
 val applicationIdProp = providers.gradleProperty("skitter.applicationId").get()
 val appNameProp = providers.gradleProperty("skitter.appName").get()
 
+// **Optional, and its default is the interesting part.** A project that wants nothing but SDL3 —
+// which is most of them — should not have to carry a line saying so, and an older `gradle.properties`
+// written before this existed must still configure. `orElse("")` gives both.
+val sdlLibrariesProp = providers.gradleProperty("skitter.sdlLibraries").orElse("").get().trim()
+
 // **The release signing key, which is deliberately not in this repository.** It is read from
 // `~/.android/sysl-signing.properties` — keystore path, password and alias — and where that file is
 // absent the release build is simply unsigned, so a fresh clone still builds without it. A key
@@ -70,6 +75,17 @@ android {
         externalNativeBuild {
             cmake {
                 arguments += listOf("-DANDROID_PLATFORM=android-24")
+
+                // **The extra SDL libraries, handed to CMake rather than written there.** A CMake
+                // list is semicolon-separated, and `gradle.properties` holds a space-separated one
+                // because that is what reads naturally in a config file — so the split happens here,
+                // at the one place both conventions are in view. `./fetch-sdl3.sh` reads the same
+                // property, so what is downloaded and what is linked cannot disagree.
+                val libs = sdlLibrariesProp.split(" ").filter { it.isNotBlank() }
+
+                if (libs.isNotEmpty()) {
+                    arguments += "-DSKITTER_SDL_LIBRARIES=${libs.joinToString(";")}"
+                }
             }
         }
 

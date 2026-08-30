@@ -3,7 +3,9 @@ cmake_minimum_required(VERSION 3.22)
 # **Nothing in this file is named for your application, and that is deliberate.** The archive, the
 # CMake project and the program directory are all constants, so there is nothing here to rename when
 # you start a project — your two names are in `gradle.properties` and are read by
-# `app/build.gradle.kts`. Leave this file alone unless you are adding a second SDL library.
+# `app/build.gradle.kts`. **That includes wanting SDL_ttf, SDL_image or SDL_mixer**: name them in
+# `skitter.sdlLibraries` and the loop below finds, links and header-paths each one. There is nothing
+# in this file to edit, ever.
 project(skitter_app C)
 
 # **Gradle owns the link here, so the arrangement is upside down from an ordinary sysl build.**
@@ -56,6 +58,44 @@ endif()
 
 get_filename_component(SDL3_LIB_DIR ${SDL3_SO} DIRECTORY)
 
+# **The extra SDL libraries, if the project asked for any.** `SKITTER_SDL_LIBRARIES` is set from
+# `skitter.sdlLibraries` in `gradle.properties` by `app/build.gradle.kts`, and `./fetch-sdl3.sh`
+# reads the same property — so a library named there is downloaded, found, linked and its headers
+# handed to sysl, with nothing in this file to edit.
+#
+# Each one is a separate AAR and a separate sysl package because **a link directive is never
+# pruned**: one merged package would put `-lSDL3_ttf` on the link line of a program that only draws
+# rectangles. That is the same argument that makes SDL3 four packages in this org rather than one.
+set(SYSL_EXTRA_ARGS "")
+set(SDL_EXTRA_TARGETS "")
+
+foreach(lib IN LISTS SKITTER_SDL_LIBRARIES)
+    # Three spellings of one name and none of them is derivable from the others: CMake's package is
+    # `SDL3_ttf`, sysl's include-path key is `sdl3-ttf` (it names the *package*, which is
+    # `sysl-lang/sdl3-ttf`), and the imported target carries a `-shared` suffix.
+    set(pkg "SDL3_${lib}")
+    set(key "sdl3-${lib}")
+
+    find_package(${pkg} REQUIRED CONFIG)
+
+    # **`${pkg}::${pkg}` is an alias and has neither property**, exactly as `SDL3::SDL3` does not —
+    # asking it answers empty, which is not an error but an empty string that goes on to become a
+    # corrupt command line below.
+    get_target_property(inc ${pkg}::${pkg}-shared INTERFACE_INCLUDE_DIRECTORIES)
+    get_target_property(so ${pkg}::${pkg}-shared IMPORTED_LOCATION)
+
+    if(NOT inc OR NOT so)
+        message(FATAL_ERROR "${pkg}'s prefab module is not there — run ./fetch-sdl3.sh")
+    endif()
+
+    get_filename_component(dir ${so} DIRECTORY)
+
+    list(APPEND SYSL_EXTRA_ARGS --include-path ${key}=${inc} --link-path ${dir})
+    list(APPEND SDL_EXTRA_TARGETS ${pkg}::${pkg})
+
+    message(STATUS "Skitter: linking ${pkg}, headers at ${inc}")
+endforeach()
+
 # **`--include-path sdl3=<dir>`, named rather than bare.** The package declares
 # `requires { pkg_config { sdl3 = … } }`, and a cross build cannot run pkg-config for another
 # machine. A bare `--include-path` adds a search path without answering the requirement, and the
@@ -72,6 +112,7 @@ add_custom_command(
             --target ${SYSL_TARGET}
             --include-path sdl3=${SDL3_INCLUDE_DIR}
             --link-path ${SDL3_LIB_DIR}
+            ${SYSL_EXTRA_ARGS}
             -o ${SYSL_ARCHIVE}
     DEPENDS ${SYSL_PROGRAM}/main.sysl ${SYSL_PROGRAM}/package.hocon
     COMMENT "Compiling your sysl program for ${SYSL_TARGET}"
@@ -100,4 +141,4 @@ add_dependencies(main sysl_archive)
 # either pulls in both.
 target_link_options(main PRIVATE -u SDL_main)
 
-target_link_libraries(main PRIVATE ${SYSL_ARCHIVE} SDL3::SDL3 m)
+target_link_libraries(main PRIVATE ${SYSL_ARCHIVE} SDL3::SDL3 ${SDL_EXTRA_TARGETS} m)
