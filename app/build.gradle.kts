@@ -16,6 +16,46 @@ val appNameProp = providers.gradleProperty("skitter.appName").get()
 // written before this existed must still configure. `orElse("")` gives both.
 val sdlLibrariesProp = providers.gradleProperty("skitter.sdlLibraries").orElse("").get().trim()
 
+// **The permissions, by the name a person would say rather than the one Android spells.** Each
+// friendly name stands for every `<uses-permission>` it takes on every Android this app installs on,
+// which is why it is a table rather than a string substitution: `bluetooth` is two lines, because the
+// permission was split in Android 12 and `minSdk` is below that. A name with a dot in it is taken as
+// Android's own spelling and passed through, so nothing is blocked by the table being short.
+//
+// The second element is `maxSdkVersion`, for a permission that a later Android replaced.
+val permissionTable = mapOf(
+    "microphone" to listOf("android.permission.RECORD_AUDIO" to null),
+    "camera" to listOf("android.permission.CAMERA" to null),
+    "internet" to listOf("android.permission.INTERNET" to null),
+    "bluetooth" to listOf(
+        "android.permission.BLUETOOTH" to 30,
+        "android.permission.BLUETOOTH_CONNECT" to null,
+    ),
+    "vibrate" to listOf("android.permission.VIBRATE" to null),
+)
+
+// **Resolved here, while Gradle is configuring**, so a misspelt name stops the build before anything
+// is compiled and says what it would have accepted, rather than producing an APK that is quietly
+// missing the permission it was asked for.
+val permissionLines: List<String> = providers.gradleProperty("skitter.permissions").orElse("").get()
+    .split(" ").filter { it.isNotBlank() }.distinct()
+    .flatMap { name ->
+        when {
+            name.contains('.') -> listOf(name to null)
+            else -> permissionTable[name] ?: throw GradleException(
+                "skitter.permissions: unknown permission '$name'. The names are " +
+                    permissionTable.keys.joinToString(", ") +
+                    ", or Android's own spelling with a dot in it, e.g. android.permission.WAKE_LOCK",
+            )
+        }
+    }
+    .distinct()
+    .map { (name, maxSdk) ->
+        val max = if (maxSdk == null) "" else " android:maxSdkVersion=\"$maxSdk\""
+
+        "    <uses-permission android:name=\"$name\"$max />"
+    }
+
 // **The release signing key, which is deliberately not in this repository.** It is read from
 // `~/.android/sysl-signing.properties` — keystore path, password and alias — and where that file is
 // absent the release build is simply unsigned, so a fresh clone still builds without it. A key
@@ -150,6 +190,38 @@ android {
 
     lint {
         abortOnError = false
+    }
+}
+
+// **The permissions reach the APK as a second manifest, merged into the first** — the same merger
+// that folds a library's manifest into yours. That is what keeps `AndroidManifest.xml` Skitter's: the
+// lines `skitter.permissions` asks for are written to a generated file under `build/`, and with the
+// property empty the file has no `<uses-permission>` in it and the merged result is unchanged.
+abstract class PermissionsManifest : DefaultTask() {
+    @get:Input
+    abstract val lines: ListProperty<String>
+
+    @get:OutputFile
+    abstract val manifest: RegularFileProperty
+
+    @TaskAction
+    fun write() {
+        manifest.get().asFile.writeText(
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
+                "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">\n" +
+                lines.get().joinToString("") { "$it\n" } +
+                "</manifest>\n",
+        )
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        val task = tasks.register<PermissionsManifest>("${variant.name}PermissionsManifest") {
+            lines.set(permissionLines)
+        }
+
+        variant.sources.manifests.addGeneratedManifestFile(task, PermissionsManifest::manifest)
     }
 }
 

@@ -88,7 +88,7 @@ That is the demonstration, and it is deliberately small enough to delete.
 
 | | |
 |---|---|
-| **`gradle.properties`** | your application id and its name. **Two lines** — and a third if you want more of SDL |
+| **`gradle.properties`** | your application id and its name. **Two lines** — and one more each if you want more of SDL or a permission |
 | **`program/main.sysl`** | your program |
 | **`program/package.hocon`** | what your program depends on |
 | everything else | Skitter's machinery — leave it |
@@ -122,6 +122,31 @@ draws rectangles — the same argument that makes SDL3 four packages in this org
 itself and needs no second AAR, no font file and no package: one size, one face, ASCII, no shaping.
 It is a debugging font by SDL's own description and scaling it up looks like scaling a bitmap up —
 but for a frame counter or a label it is free, and `sdl3-ttf` is 1.9 MB.
+
+### The microphone, the camera and the network
+
+A permission is a line too, not an edit to the manifest. A guitar tuner is
+
+```
+skitter.permissions=microphone
+```
+
+| name | what Android is asked for |
+|---|---|
+| `microphone` | `RECORD_AUDIO` |
+| `camera` | `CAMERA` |
+| `internet` | `INTERNET` |
+| `bluetooth` | `BLUETOOTH_CONNECT`, and `BLUETOOTH` up to Android 11, where the permission was split |
+| `vibrate` | `VIBRATE` — always granted already |
+
+Anything else is written in Android's own spelling, `android.permission.WAKE_LOCK`, and passed through;
+a short name the table does not know stops the build and lists the ones it does. The build writes
+these into a generated manifest and **merges** it with Skitter's, the way a library's manifest is
+merged, so `AndroidManifest.xml` stays as it is.
+
+**The microphone and the camera are also asked for while the app runs**, since Android grants those
+only when the person says yes. SDL asks by itself when the program opens a recording device or a
+camera; what the program owes is coping with *no*, which reaches it as the device failing to open.
 
 **The machinery is not left alone out of politeness.** Four things in it are load-bearing and silent
 when wrong, which is why they are somewhere you are not expected to look:

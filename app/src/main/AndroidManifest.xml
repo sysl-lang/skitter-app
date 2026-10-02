@@ -6,8 +6,10 @@
     there is one Android must *not* respond to by destroying and recreating the activity.
 
     What was dropped: the commented-out permission blocks for audio recording, the camera, Bluetooth
-    and the network, and the USB and file-drop intent filters. A program that wants one takes it back
-    from https://github.com/libsdl-org/SDL/blob/main/android-project/app/src/main/AndroidManifest.xml
+    and the network — those are `skitter.permissions` in `gradle.properties` now, merged in by the
+    build, so this file is not where you ask for the microphone — and the USB and file-drop intent
+    filters. A program that wants one of those takes it back from
+    https://github.com/libsdl-org/SDL/blob/main/android-project/app/src/main/AndroidManifest.xml
     rather than from memory.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
@@ -35,6 +37,12 @@
         android:name="android.hardware.type.pc"
         android:required="false" />
 
+    <!--
+        Kept here rather than behind `skitter.permissions`, as SDL's own template keeps it: SDL's
+        rumble and haptics call the vibrator for any game controller, and Android grants this one at
+        install without asking anybody — so it costs a user nothing and leaving it out only breaks a
+        feature quietly. Every other permission is a line in `gradle.properties`.
+    -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
