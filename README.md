@@ -105,7 +105,7 @@ skitter.sdlLibraries=ttf image
 
 ```
 dependencies {
-  skitter    { git = "github.com/sysl-lang/skitter",    version = "0.1.0" }
+  skitter    { git = "github.com/sysl-lang/skitter",    version = "0.2.0" }
   sdl3-ttf   { git = "github.com/sysl-lang/sdl3-ttf",   version = "0.3.0" }
   sdl3-image { git = "github.com/sysl-lang/sdl3-image", version = "0.1.0" }
 }
@@ -284,8 +284,8 @@ The starter draws with SDL directly, which keeps it small. For real controls, ad
 
 ```
 dependencies {
-  skitter    { git = "github.com/sysl-lang/skitter",    version = "0.1.0" }
-  syslui-sdl { git = "github.com/sysl-lang/syslui-sdl", version = "0.1.0" }
+  skitter    { git = "github.com/sysl-lang/skitter",    version = "0.2.0" }
+  syslui-sdl { git = "github.com/sysl-lang/syslui-sdl", version = "0.2.3" }
 }
 ```
 

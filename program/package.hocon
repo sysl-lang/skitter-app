@@ -17,9 +17,9 @@ package {
 //
 // For an interface rather than a drawing, add syslUI's SDL driver and the toolkit comes with it:
 //
-//     syslui-sdl { git = "github.com/sysl-lang/syslui-sdl", version = "0.1.0" }
+//     syslui-sdl { git = "github.com/sysl-lang/syslui-sdl", version = "0.2.3" }
 dependencies {
-  skitter { git = "github.com/sysl-lang/skitter", version = "0.1.0" }
+  skitter { git = "github.com/sysl-lang/skitter", version = "0.2.0" }
 }
 
 // What SDL3 itself requires, restated because a program reaching a gated module has to say so too.
