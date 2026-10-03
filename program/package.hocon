@@ -7,8 +7,9 @@ package {
   name    = "program"
   version = "0.1.0"
 
-  // Imports became transitive in 0.0.73, which is what lets the block below name one coordinate.
-  sysl = "0.0.73"
+  // Skitter 0.3.0's floor. 0.0.73 was the first with transitive imports, which is what lets the
+  // block below name one coordinate.
+  sysl = "0.0.161"
 }
 
 // **One coordinate.** Naming Skitter reaches SDL3 through it, because imports are transitive — so
@@ -19,7 +20,7 @@ package {
 //
 //     syslui-sdl { git = "github.com/sysl-lang/syslui-sdl", version = "0.2.3" }
 dependencies {
-  skitter { git = "github.com/sysl-lang/skitter", version = "0.2.0" }
+  skitter { git = "github.com/sysl-lang/skitter", version = "0.3.0" }
 }
 
 // What SDL3 itself requires, restated because a program reaching a gated module has to say so too.

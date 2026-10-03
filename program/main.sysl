@@ -14,7 +14,8 @@
 
 import sh.sysl.sdl3.*
 import sh.sysl.sdl3.{INIT_VIDEO, SCANCODE_ESCAPE}
-import sh.sysl.skitter.{orient, window_flags, safe_area}
+import sh.sysl.skitter.{logcat, orient, window_flags, safe_area}
+import sysl.log.info
 import sysl.math.min
 
 // **What the window is asked for, and not what it gets.** Android answers a size request with the
@@ -28,6 +29,13 @@ const SPEED: f32 = 260.0
 const SIDE: f32 = 72.0
 
 sdl_main_body() -> i32
+    // **First, because on a phone standard output and standard error go nowhere.** From here every
+    // `sysl.log` record — this program's and any library's — is a logcat entry under `skitter`, the tag
+    // `skitter run` and `skitter log` already follow. `print` still goes nowhere; log instead. On a
+    // desktop this does nothing and records go to standard error as usual.
+    logcat("skitter")
+    info("started", [("version", __VERSION__)])
+
     // **Before `init`, because a hint is read when the thing it configures is created** — and on
     // Android the activity's orientation is settled during startup.
     orient()

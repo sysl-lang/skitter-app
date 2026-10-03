@@ -150,4 +150,7 @@ add_dependencies(main sysl_archive)
 # either pulls in both.
 target_link_options(main PRIVATE -u SDL_main)
 
-target_link_libraries(main PRIVATE ${SYSL_ARCHIVE} SDL3::SDL3 ${SDL_EXTRA_TARGETS} m)
+# **`log` is Android's `liblog`, which Skitter's logcat sink writes through.** The module that calls
+# `__android_log_write` declares `@link("log")`, but that directive reaches only a link sysl runs —
+# here CMake runs it, so the library is named here, beside the others.
+target_link_libraries(main PRIVATE ${SYSL_ARCHIVE} SDL3::SDL3 ${SDL_EXTRA_TARGETS} m log)

@@ -66,8 +66,9 @@ belongs in a repository is something a person can read.
 **Android Studio uses its own bundled JDK** and is unaffected by the version rule; a terminal whose
 `java` is newer needs `JAVA_HOME=<a jdk 17-25> ./gradlew assembleDebug`.
 
-**It needs sysl 0.0.73 or newer.** 0.0.61 was the first that knew `aarch64-android` and 0.0.73 is the
-first with transitive imports, which is what lets `program/package.hocon` name one coordinate.
+**It needs sysl 0.0.161 or newer**, which is Skitter 0.3.0's floor. 0.0.61 was the first that knew
+`aarch64-android` and 0.0.73 the first with transitive imports, which is what lets
+`program/package.hocon` name one coordinate.
 `sysl targets` lists what a compiler has; if `aarch64-android` is not among them, the build stops at
 `unknown target` and no amount of Android configuration will help.
 
@@ -94,6 +95,13 @@ That is the demonstration, and it is deliberately small enough to delete.
 | **`program/package.hocon`** | what your program depends on, and its version — which is the app's |
 | everything else | Skitter's machinery — leave it |
 
+### Logging
+
+Standard output goes nowhere on a phone, so `main.sysl` starts with `logcat("skitter")`: from then on
+every `sysl.log` record, the program's and any library's, is a logcat entry under the tag `skitter`,
+which `skitter run` and `skitter log` already follow (`adb logcat -s skitter` by hand). The template
+logs one line at startup, `started version=0.1.0`. `print` is not redirected; use `sysl.log`.
+
 ### Text, images and sound
 
 SDL3 on its own draws, takes input, and plays nothing. The three companion libraries are one line
@@ -105,7 +113,7 @@ skitter.sdlLibraries=ttf image
 
 ```
 dependencies {
-  skitter    { git = "github.com/sysl-lang/skitter",    version = "0.2.0" }
+  skitter    { git = "github.com/sysl-lang/skitter",    version = "0.3.0" }
   sdl3-ttf   { git = "github.com/sysl-lang/sdl3-ttf",   version = "0.3.0" }
   sdl3-image { git = "github.com/sysl-lang/sdl3-image", version = "0.1.0" }
 }
@@ -284,7 +292,7 @@ The starter draws with SDL directly, which keeps it small. For real controls, ad
 
 ```
 dependencies {
-  skitter    { git = "github.com/sysl-lang/skitter",    version = "0.2.0" }
+  skitter    { git = "github.com/sysl-lang/skitter",    version = "0.3.0" }
   syslui-sdl { git = "github.com/sysl-lang/syslui-sdl", version = "0.2.3" }
 }
 ```
