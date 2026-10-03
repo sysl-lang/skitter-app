@@ -238,11 +238,25 @@ val applicationLines: List<String> = when {
 //
 // **Losing it costs more than it looks.** Android identifies an app by its signature, so a new key
 // means a new identity: an APK signed with a different one will not install over an existing
-// install, and everybody who has it has to uninstall first.
-val signingProps = Properties().apply {
-    val f = File(System.getProperty("user.home"), ".android/sysl-signing.properties")
+// install, and everybody who has it has to uninstall first. On Play it is worse: the listing is tied
+// to the upload key, and a lost one is a support request to Google rather than a rebuild.
+//
+// **`SYSL_SIGNING_PROPERTIES` names a different file**, for a second key, a CI secret mounted
+// somewhere else, or a throwaway one — `skitter keygen` honours the same variable, so the key it makes
+// is the key this reads.
+val signingFile: File = System.getenv("SYSL_SIGNING_PROPERTIES")?.takeIf { it.isNotBlank() }?.let(::File)
+    ?: File(System.getProperty("user.home"), ".android/sysl-signing.properties")
 
-    if (f.exists()) f.inputStream().use { load(it) }
+val signingProps = Properties().apply {
+    if (signingFile.exists()) signingFile.inputStream().use { load(it) }
+}
+
+// **A properties file naming a keystore that is not there is refused here**, rather than left to the
+// signing task, whose message names neither this file nor the variable that chose it.
+signingProps.getProperty("SYSL_KEYSTORE")?.let {
+    if (!File(it).isFile) {
+        throw GradleException("$signingFile names the keystore '$it', which does not exist")
+    }
 }
 
 android {
@@ -309,6 +323,12 @@ android {
         // covers the emulator and the hardware. `x86_64` matters only on an Intel host or a CI
         // runner, `armeabi-v7a` only for pre-2015 phones; adding either is a line here and a second
         // row in the sysl registry that does not exist yet.
+        //
+        // **It is also the ABI Play insists on**: an app with native code must ship `arm64-v8a`, and
+        // shipping only that is accepted — Play simply does not offer the app to a 32-bit-only or
+        // x86 device. So `bundleRelease` needs no `bundle { abi { … } }` block: AGP's default splits
+        // the bundle by ABI, a split of one is the whole library, and with `minSdk` above 23
+        // `libmain.so` is stored uncompressed and loaded in place, which is what Play wants.
         ndk {
             abiFilters += "arm64-v8a"
         }

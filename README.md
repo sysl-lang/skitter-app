@@ -45,7 +45,8 @@ CMake toolchain error.
 | `skitter build` | just the debug APK |
 | `skitter install` | install what was last built |
 | `skitter log` | follow a running app's output |
-| `skitter release` | a release APK, signed if you have a key |
+| `skitter release` | the release APK and the Play bundle, signed if you have a key |
+| `skitter keygen` | make the release key, once — see [Publishing to Play](#publishing-to-play) |
 | `skitter clean` | Gradle's output and sbt's |
 
 **Nothing here needs it.** This is an ordinary Gradle project and the tool only drives it, so the
@@ -228,6 +229,39 @@ when wrong, which is why they are somewhere you are not expected to look:
 - **`ANDROID_NDK_ROOT` handed to `sysl build-c`.** sysl takes the newest NDK it can find and AGP uses
   the `ndkVersion` pinned in `app/build.gradle.kts` — and a machine normally has two, because AGP
   downloads its own. Passing the one CMake is already using makes them the same by construction.
+
+## Publishing to Play
+
+Play takes an **Android App Bundle** (`.aab`), signed with your upload key.
+
+**The key, once.** `skitter keygen` makes a keystore at `~/.android/sysl-release.jks` and writes
+`~/.android/sysl-signing.properties` beside it, which is where the build looks. It refuses to replace
+either. Back both up somewhere other than this machine: Play ties your listing to this key, and a lost
+one means you can no longer publish updates. By hand, the same thing is a `keytool -genkeypair
+-storetype PKCS12 -alias upload …` and a properties file holding `SYSL_KEYSTORE`,
+`SYSL_KEYSTORE_PASSWORD` and `SYSL_KEY_ALIAS`. `SYSL_SIGNING_PROPERTIES` points both the build and
+`keygen` at a different file, such as a second key or a CI secret. With no key, the release build
+still succeeds, but it is unsigned.
+
+**The bundle.** `skitter release` runs `./gradlew assembleRelease bundleRelease` and says where both
+landed, whether they are signed, and the version and `versionCode` they carry:
+
+```
+app/build/outputs/apk/release/app-release.apk       to install by hand and check
+app/build/outputs/bundle/release/app-release.aab    to upload
+```
+
+The bundle carries `arm64-v8a` only (see [One ABI](#one-abi)). Play requires that ABI from an app
+with native code and accepts a bundle that has nothing else. A 32-bit-only or x86 device simply will
+not be offered the app.
+
+**The version code** comes from `program/package.hocon` (see [The version](#the-version)). Play
+refuses an upload whose code is not higher than the last one, so bump `version` before each upload.
+
+**The target API level.** Play refuses new apps and updates whose `targetSdk` is below its yearly
+floor, which it raises every August to roughly the previous year's Android. This template targets 36
+(Android 16), which meets the floor as of 2026. When Play announces the next floor, raise `targetSdk`
+and `compileSdk` in `app/build.gradle.kts` together.
 
 ## Why your application id is free
 
