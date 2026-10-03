@@ -45,7 +45,8 @@ CMake toolchain error.
 | `skitter build` | just the debug APK |
 | `skitter install` | install what was last built |
 | `skitter log` | follow a running app's output |
-| `skitter release` | a release APK, signed if you have a key |
+| `skitter release` | the release APK and the Play bundle, signed if you have a key |
+| `skitter keygen` | make the release key, once — see [Publishing to Play](#publishing-to-play) |
 | `skitter clean` | Gradle's output and sbt's |
 
 **Nothing here needs it.** This is an ordinary Gradle project and the tool only drives it, so the
@@ -88,9 +89,9 @@ That is the demonstration, and it is deliberately small enough to delete.
 
 | | |
 |---|---|
-| **`gradle.properties`** | your application id and its name. **Two lines** — and one more each if you want more of SDL, a permission or an icon |
+| **`gradle.properties`** | your application id and its name. **Two lines** — and one more each if you want more of SDL, a permission, an icon, a fixed orientation or coloured bars |
 | **`program/main.sysl`** | your program |
-| **`program/package.hocon`** | what your program depends on |
+| **`program/package.hocon`** | what your program depends on, and its version — which is the app's |
 | everything else | Skitter's machinery — leave it |
 
 ### Text, images and sound
@@ -179,6 +180,39 @@ also what the themed icon is drawn from, where a picture opaque to its edges bec
 The attributes reach the manifest the way the permissions do, merged in from a generated one, so
 `AndroidManifest.xml` is untouched here too.
 
+### Orientation and the system bars
+
+```
+skitter.orientation=portrait
+skitter.barColor=#102030
+```
+
+`skitter.orientation` is `any` (the default: the program decides, with `orient()`), `portrait`,
+`landscape`, `sensorPortrait` or `sensorLandscape`; any other name stops the build and lists these.
+**Anything but `any` is a lock the program cannot undo.** It is written twice, because once is not
+enough: `android:screenOrientation` on the activity holds from the moment Android starts it, and
+SDL — which calls `setRequestedOrientation` itself when the program creates its window, replacing
+the manifest's answer — is handed the same choice as `SDL_ORIENTATIONS` through
+`<meta-data android:name="SDL_ENV.SDL_ORIENTATIONS">`. SDL turns that into an environment variable
+before the program starts, and an environment variable outranks the program's own `set_hint`, so
+`orient()` is overruled rather than obeyed. Android 16 ignores the lock on a large screen, by design.
+
+`skitter.barColor` is `#RRGGBB`. It generates a style, `SkitterBars`, whose parent is the template's
+`AppTheme`, and points `<application>` at it: both bars are painted that colour, and their icons are
+dark on a light colour and light on a dark one, chosen by which has the greater contrast. **Android 15
+and later ignore the colour itself** — an app targeting 35 or above is drawn edge to edge and its bars
+are transparent — so there the line only picks the icon shade, and should name the colour the program
+draws behind the bars. Empty, the default, generates nothing.
+
+### The version
+
+The version is not a line in `gradle.properties`: it is `version` in `program/package.hocon`, which
+your program reads as `__VERSION__`, so the screen and the system's app info cannot disagree.
+Android's `versionCode` is derived from it — `MAJOR × 1000000 + MINOR × 1000 + PATCH`, so 1.2.3 is
+1002003 — which keeps it going up whenever the version does, with no second number to forget. A
+version that would break that order — a suffix such as `-rc1`, or a part of 1000 or more — stops the
+build.
+
 **The machinery is not left alone out of politeness.** Four things in it are load-bearing and silent
 when wrong, which is why they are somewhere you are not expected to look:
 
@@ -195,6 +229,39 @@ when wrong, which is why they are somewhere you are not expected to look:
 - **`ANDROID_NDK_ROOT` handed to `sysl build-c`.** sysl takes the newest NDK it can find and AGP uses
   the `ndkVersion` pinned in `app/build.gradle.kts` — and a machine normally has two, because AGP
   downloads its own. Passing the one CMake is already using makes them the same by construction.
+
+## Publishing to Play
+
+Play takes an **Android App Bundle** (`.aab`), signed with your upload key.
+
+**The key, once.** `skitter keygen` makes a keystore at `~/.android/sysl-release.jks` and writes
+`~/.android/sysl-signing.properties` beside it, which is where the build looks. It refuses to replace
+either. Back both up somewhere other than this machine: Play ties your listing to this key, and a lost
+one means you can no longer publish updates. By hand, the same thing is a `keytool -genkeypair
+-storetype PKCS12 -alias upload …` and a properties file holding `SYSL_KEYSTORE`,
+`SYSL_KEYSTORE_PASSWORD` and `SYSL_KEY_ALIAS`. `SYSL_SIGNING_PROPERTIES` points both the build and
+`keygen` at a different file, such as a second key or a CI secret. With no key, the release build
+still succeeds, but it is unsigned.
+
+**The bundle.** `skitter release` runs `./gradlew assembleRelease bundleRelease` and says where both
+landed, whether they are signed, and the version and `versionCode` they carry:
+
+```
+app/build/outputs/apk/release/app-release.apk       to install by hand and check
+app/build/outputs/bundle/release/app-release.aab    to upload
+```
+
+The bundle carries `arm64-v8a` only (see [One ABI](#one-abi)). Play requires that ABI from an app
+with native code and accepts a bundle that has nothing else. A 32-bit-only or x86 device simply will
+not be offered the app.
+
+**The version code** comes from `program/package.hocon` (see [The version](#the-version)). Play
+refuses an upload whose code is not higher than the last one, so bump `version` before each upload.
+
+**The target API level.** Play refuses new apps and updates whose `targetSdk` is below its yearly
+floor, which it raises every August to roughly the previous year's Android. This template targets 36
+(Android 16), which meets the floor as of 2026. When Play announces the next floor, raise `targetSdk`
+and `compileSdk` in `app/build.gradle.kts` together.
 
 ## Why your application id is free
 
