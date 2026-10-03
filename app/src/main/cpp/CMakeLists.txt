@@ -105,6 +105,15 @@ endforeach()
 # see, and AGP uses the `ndkVersion` pinned in `app/build.gradle.kts` — and a machine normally has
 # two, because AGP downloads its own. Passing the one CMake is already using makes them the same by
 # construction rather than by coincidence.
+#
+# **Every `.sysl` file under `program/` is a dependency, not only `main.sysl`.** A custom command
+# reruns only when something in its `DEPENDS` changes, so a program that grows a module of its own —
+# `program/tuner/pipeline.sysl` — and names only `main.sysl` here builds green after an edit to that
+# module and ships the archive from before it. `sysl build-c` writes no depfile, so the list is a
+# glob, and `CONFIGURE_DEPENDS` makes the build re-glob each time: a file ADDED to `program/` is
+# noticed as well as one edited. `sysl.sum` is in it because a changed lock is a changed dependency.
+file(GLOB_RECURSE SYSL_SOURCES CONFIGURE_DEPENDS ${SYSL_PROGRAM}/*.sysl)
+
 add_custom_command(
     OUTPUT ${SYSL_ARCHIVE}
     COMMAND ${CMAKE_COMMAND} -E env ANDROID_NDK_ROOT=${ANDROID_NDK}
@@ -114,7 +123,7 @@ add_custom_command(
             --link-path ${SDL3_LIB_DIR}
             ${SYSL_EXTRA_ARGS}
             -o ${SYSL_ARCHIVE}
-    DEPENDS ${SYSL_PROGRAM}/main.sysl ${SYSL_PROGRAM}/package.hocon
+    DEPENDS ${SYSL_SOURCES} ${SYSL_PROGRAM}/package.hocon ${SYSL_PROGRAM}/sysl.sum
     COMMENT "Compiling your sysl program for ${SYSL_TARGET}"
     VERBATIM)
 
