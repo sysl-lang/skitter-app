@@ -88,9 +88,9 @@ That is the demonstration, and it is deliberately small enough to delete.
 
 | | |
 |---|---|
-| **`gradle.properties`** | your application id and its name. **Two lines** — and one more each if you want more of SDL, a permission or an icon |
+| **`gradle.properties`** | your application id and its name. **Two lines** — and one more each if you want more of SDL, a permission, an icon, a fixed orientation or coloured bars |
 | **`program/main.sysl`** | your program |
-| **`program/package.hocon`** | what your program depends on |
+| **`program/package.hocon`** | what your program depends on, and its version — which is the app's |
 | everything else | Skitter's machinery — leave it |
 
 ### Text, images and sound
@@ -178,6 +178,39 @@ also what the themed icon is drawn from, where a picture opaque to its edges bec
 
 The attributes reach the manifest the way the permissions do, merged in from a generated one, so
 `AndroidManifest.xml` is untouched here too.
+
+### Orientation and the system bars
+
+```
+skitter.orientation=portrait
+skitter.barColor=#102030
+```
+
+`skitter.orientation` is `any` (the default: the program decides, with `orient()`), `portrait`,
+`landscape`, `sensorPortrait` or `sensorLandscape`; any other name stops the build and lists these.
+**Anything but `any` is a lock the program cannot undo.** It is written twice, because once is not
+enough: `android:screenOrientation` on the activity holds from the moment Android starts it, and
+SDL — which calls `setRequestedOrientation` itself when the program creates its window, replacing
+the manifest's answer — is handed the same choice as `SDL_ORIENTATIONS` through
+`<meta-data android:name="SDL_ENV.SDL_ORIENTATIONS">`. SDL turns that into an environment variable
+before the program starts, and an environment variable outranks the program's own `set_hint`, so
+`orient()` is overruled rather than obeyed. Android 16 ignores the lock on a large screen, by design.
+
+`skitter.barColor` is `#RRGGBB`. It generates a style, `SkitterBars`, whose parent is the template's
+`AppTheme`, and points `<application>` at it: both bars are painted that colour, and their icons are
+dark on a light colour and light on a dark one, chosen by which has the greater contrast. **Android 15
+and later ignore the colour itself** — an app targeting 35 or above is drawn edge to edge and its bars
+are transparent — so there the line only picks the icon shade, and should name the colour the program
+draws behind the bars. Empty, the default, generates nothing.
+
+### The version
+
+The version is not a line in `gradle.properties`: it is `version` in `program/package.hocon`, which
+your program reads as `__VERSION__`, so the screen and the system's app info cannot disagree.
+Android's `versionCode` is derived from it — `MAJOR × 1000000 + MINOR × 1000 + PATCH`, so 1.2.3 is
+1002003 — which keeps it going up whenever the version does, with no second number to forget. A
+version that would break that order — a suffix such as `-rc1`, or a part of 1000 or more — stops the
+build.
 
 **The machinery is not left alone out of politeness.** Four things in it are load-bearing and silent
 when wrong, which is why they are somewhere you are not expected to look:
