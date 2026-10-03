@@ -23,6 +23,10 @@ val appNameProp = providers.gradleProperty("skitter.appName").get()
 // written before this existed must still configure. `orElse("")` gives both.
 val sdlLibrariesProp = providers.gradleProperty("skitter.sdlLibraries").orElse("").get().trim()
 
+// Whether the screen stays on while the app is in front. Anything but `true` is `false`, which is
+// also what a `gradle.properties` written before this line existed gets.
+val keepAwakeProp = providers.gradleProperty("skitter.keepAwake").orElse("false").get().trim() == "true"
+
 // **The permissions, by the name a person would say rather than the one Android spells.** Each
 // friendly name stands for every `<uses-permission>` it takes on every Android this app installs on,
 // which is why it is a table rather than a string substitution: `bluetooth` is two lines, because the
@@ -152,6 +156,10 @@ android {
         // second place your application's name lives, and the manifest reads `@string/app_name`
         // either way — so the string is generated from the property and there is no file to forget.
         resValue("string", "app_name", appNameProp)
+
+        // `skitter.keepAwake`, which the activity reads at startup. A resource rather than a manifest
+        // entry because the activity is the only thing that reads it.
+        resValue("bool", "skitter_keep_awake", keepAwakeProp.toString())
 
         // **26, and the number is the Scala standard library's rather than SDL's or sysl's.**
         // `scala-library` uses class-file features `d8` will only desugar from 26 up — *"Increase the
