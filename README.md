@@ -88,7 +88,7 @@ That is the demonstration, and it is deliberately small enough to delete.
 
 | | |
 |---|---|
-| **`gradle.properties`** | your application id and its name. **Two lines** — and one more each if you want more of SDL or a permission |
+| **`gradle.properties`** | your application id and its name. **Two lines** — and one more each if you want more of SDL, a permission or an icon |
 | **`program/main.sysl`** | your program |
 | **`program/package.hocon`** | what your program depends on |
 | everything else | Skitter's machinery — leave it |
@@ -147,6 +147,37 @@ merged, so `AndroidManifest.xml` stays as it is.
 **The microphone and the camera are also asked for while the app runs**, since Android grants those
 only when the person says yes. SDL asks by itself when the program opens a recording device or a
 camera; what the program owes is coping with *no*, which reaches it as the device failing to open.
+
+### An icon
+
+The launcher icon is a line as well — a path, from the project root, to **one square PNG**:
+
+```
+skitter.icon=icon.png
+skitter.iconBackground=#263238
+```
+
+Draw it at **1024×1024**. Anything not square, or smaller than 432×432 (the largest size Android
+draws, so nothing is ever enlarged), stops the build and says which. `skitter.iconBackground` is
+`#RRGGBB` and defaults to white. Leave `skitter.icon` empty and there is no icon at all — Android
+shows its generic one, and the merged manifest is exactly what it was without the line.
+
+From that one file the build draws everything Android asks for, with nothing but the JDK:
+
+- `ic_launcher.png` at 48, 72, 96, 144 and 192 px, and `ic_launcher_round.png`, the same over the
+  background colour cut to a circle;
+- the **adaptive icon** (`mipmap-anydpi-v26`) that every Android since 8 draws: a foreground layer of
+  108, 162, 216, 324 and 432 px over the background colour;
+- a **monochrome** layer for Android 13's themed icons, the logo's outline taken from its alpha.
+
+**Keep the logo's important part inside the middle two thirds.** A launcher crops the adaptive icon
+to its own shape — a circle, a squircle, a teardrop — and may move it under a finger, so only the
+middle 66 of its 108 units are sure to be seen. The build scales your picture into exactly that
+middle and lays it over the colour. A logo on a transparent background works best: its outline is
+also what the themed icon is drawn from, where a picture opaque to its edges becomes a plain square.
+
+The attributes reach the manifest the way the permissions do, merged in from a generated one, so
+`AndroidManifest.xml` is untouched here too.
 
 **The machinery is not left alone out of politeness.** Four things in it are load-bearing and silent
 when wrong, which is why they are somewhere you are not expected to look:

@@ -1,4 +1,11 @@
+import java.awt.AlphaComposite
+import java.awt.Color
+import java.awt.Graphics2D
+import java.awt.RenderingHints
+import java.awt.geom.Ellipse2D
+import java.awt.image.BufferedImage
 import java.util.Properties
+import javax.imageio.ImageIO
 
 plugins {
     id("com.android.application")
@@ -55,6 +62,60 @@ val permissionLines: List<String> = providers.gradleProperty("skitter.permission
 
         "    <uses-permission android:name=\"$name\"$max />"
     }
+
+// **The launcher icon, from one square PNG.** Empty means no icon at all — no attribute in the
+// manifest and no resource in the APK, so Android draws its generic one, exactly as before this line
+// existed. A path is relative to the project root, which is where `gradle.properties` is.
+//
+// **Checked here, while Gradle is configuring**, for the same reason the permissions are: a missing
+// file or a picture of the wrong shape stops the build with what was wrong, rather than producing an
+// icon squashed out of proportion or blurred up from a thumbnail. 432 px is the floor because it is
+// the largest size anything is drawn at — the adaptive layer at xxxhdpi — so nothing is ever enlarged.
+val iconMinimum = 432
+
+val iconFile: File? = providers.gradleProperty("skitter.icon").orElse("").get().trim()
+    .takeIf { it.isNotEmpty() }
+    ?.let { name ->
+        val f = rootProject.file(name)
+        if (!f.isFile) throw GradleException("skitter.icon: there is no file '$name' (looked for ${f.absolutePath})")
+
+        val image = ImageIO.read(f)
+            ?: throw GradleException("skitter.icon: '$name' is not an image Java can read; give it a PNG")
+
+        if (image.width != image.height) {
+            throw GradleException(
+                "skitter.icon: '$name' is ${image.width}×${image.height}, and an icon has to be square. " +
+                    "Crop or pad it to a square, 1024×1024 for preference",
+            )
+        }
+
+        if (image.width < iconMinimum) {
+            throw GradleException(
+                "skitter.icon: '$name' is ${image.width}×${image.height}, and the largest icon Android draws " +
+                    "is $iconMinimum×$iconMinimum, so it would be enlarged and blurred. Give it at least " +
+                    "$iconMinimum px a side, 1024×1024 for preference",
+            )
+        }
+
+        f
+    }
+
+val iconBackgroundProp: String = providers.gradleProperty("skitter.iconBackground").orElse("").get().trim()
+    .ifEmpty { "#FFFFFF" }
+    .also {
+        if (!Regex("#[0-9A-Fa-f]{6}").matches(it)) {
+            throw GradleException("skitter.iconBackground: '$it' is not a colour; write it as #RRGGBB, e.g. #1E88E5")
+        }
+    }
+
+// The two attributes the generated manifest adds to `<application>`, and only where there is an icon.
+val iconLines: List<String> = if (iconFile == null) {
+    emptyList()
+} else {
+    listOf(
+        "    <application android:icon=\"@mipmap/ic_launcher\" android:roundIcon=\"@mipmap/ic_launcher_round\" />",
+    )
+}
 
 // **The release signing key, which is deliberately not in this repository.** It is read from
 // `~/.android/sysl-signing.properties` — keystore path, password and alias — and where that file is
@@ -193,11 +254,12 @@ android {
     }
 }
 
-// **The permissions reach the APK as a second manifest, merged into the first** — the same merger
-// that folds a library's manifest into yours. That is what keeps `AndroidManifest.xml` Skitter's: the
-// lines `skitter.permissions` asks for are written to a generated file under `build/`, and with the
-// property empty the file has no `<uses-permission>` in it and the merged result is unchanged.
-abstract class PermissionsManifest : DefaultTask() {
+// **The permissions and the icon reach the APK as a second manifest, merged into the first** — the
+// same merger that folds a library's manifest into yours. That is what keeps `AndroidManifest.xml`
+// Skitter's: the lines `skitter.permissions` and `skitter.icon` ask for are written to a generated
+// file under `build/`, and with both properties empty the file is an empty `<manifest>` and the merged
+// result is unchanged.
+abstract class GeneratedManifest : DefaultTask() {
     @get:Input
     abstract val lines: ListProperty<String>
 
@@ -215,13 +277,157 @@ abstract class PermissionsManifest : DefaultTask() {
     }
 }
 
-androidComponents {
-    onVariants { variant ->
-        val task = tasks.register<PermissionsManifest>("${variant.name}PermissionsManifest") {
-            lines.set(permissionLines)
+// **Every launcher icon Android asks for, drawn from the one PNG with nothing but the JDK.**
+//
+// - `mipmap-<density>/ic_launcher.png`, 48 dp: the picture itself, for a launcher that does not take
+//   adaptive icons, and `ic_launcher_round.png`, the same over the background colour, cut to a circle.
+// - `mipmap-anydpi-v26/ic_launcher.xml` (and `_round`): the adaptive icon every Android since 8 draws,
+//   whose layers are 108 dp squares the launcher masks to its own shape — circle, squircle, teardrop —
+//   and may move a little under a finger. Only the middle 66 dp is guaranteed to be seen, so the
+//   foreground is the picture scaled into that middle, and the background is the colour.
+// - a `<monochrome>` layer for Android 13's themed icons: the foreground's shape, taken from its alpha,
+//   which the system tints to match the wallpaper. A logo on a transparent background has a shape; a
+//   picture that is opaque to its edges becomes a plain rounded square there.
+//
+// Downscaling halves the picture repeatedly with bilinear filtering before the last step, and works in
+// premultiplied alpha, which is what keeps a 1024 px original sharp at 48 and stops dark fringes
+// appearing round a transparent edge.
+abstract class LauncherIcon : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val source: RegularFileProperty
+
+    @get:Input
+    abstract val background: Property<String>
+
+    @get:OutputDirectory
+    abstract val res: DirectoryProperty
+
+    private val densities = listOf("mdpi" to 1.0, "hdpi" to 1.5, "xhdpi" to 2.0, "xxhdpi" to 3.0, "xxxhdpi" to 4.0)
+
+    @TaskAction
+    fun generate() {
+        val out = res.get().asFile
+        out.deleteRecursively()
+
+        val original = ImageIO.read(source.get().asFile)
+        val logo = BufferedImage(original.width, original.height, BufferedImage.TYPE_INT_ARGB_PRE)
+        logo.createGraphics().apply { drawImage(original, 0, 0, null); dispose() }
+
+        val colour = Color(Integer.parseInt(background.get().substring(1), 16))
+
+        for ((name, scale) in densities) {
+            val dir = File(out, "mipmap-$name").apply { mkdirs() }
+            val legacy = (48 * scale).toInt()
+            val layer = (108 * scale).toInt()
+            val safe = (66 * scale).toInt()
+
+            write(scaled(logo, legacy), File(dir, "ic_launcher.png"))
+            write(round(scaled(logo, legacy), colour), File(dir, "ic_launcher_round.png"))
+
+            val foreground = centred(scaled(logo, safe), layer)
+            write(foreground, File(dir, "ic_launcher_foreground.png"))
+            write(monochrome(foreground), File(dir, "ic_launcher_monochrome.png"))
         }
 
-        variant.sources.manifests.addGeneratedManifestFile(task, PermissionsManifest::manifest)
+        File(out, "values").mkdirs()
+        File(out, "values/ic_launcher_background.xml").writeText(
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
+                "<resources>\n" +
+                "    <color name=\"ic_launcher_background\">${background.get()}</color>\n" +
+                "</resources>\n",
+        )
+
+        val adaptive = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
+            "<adaptive-icon xmlns:android=\"http://schemas.android.com/apk/res/android\">\n" +
+            "    <background android:drawable=\"@color/ic_launcher_background\" />\n" +
+            "    <foreground android:drawable=\"@mipmap/ic_launcher_foreground\" />\n" +
+            "    <monochrome android:drawable=\"@mipmap/ic_launcher_monochrome\" />\n" +
+            "</adaptive-icon>\n"
+
+        File(out, "mipmap-anydpi-v26").mkdirs()
+        File(out, "mipmap-anydpi-v26/ic_launcher.xml").writeText(adaptive)
+        File(out, "mipmap-anydpi-v26/ic_launcher_round.xml").writeText(adaptive)
+    }
+
+    private fun canvas(side: Int) =
+        BufferedImage(side, side, BufferedImage.TYPE_INT_ARGB_PRE)
+
+    private fun quality(g: Graphics2D) = g.apply {
+        setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+        setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
+        setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+    }
+
+    private fun scaled(src: BufferedImage, side: Int): BufferedImage {
+        var img = src
+        var w = src.width
+
+        while (w / 2 >= side) {
+            w /= 2
+            img = resized(img, w)
+        }
+
+        return if (w == side) img else resized(img, side)
+    }
+
+    private fun resized(src: BufferedImage, side: Int) = canvas(side).also {
+        quality(it.createGraphics()).apply { drawImage(src, 0, 0, side, side, null); dispose() }
+    }
+
+    private fun centred(src: BufferedImage, side: Int) = canvas(side).also {
+        val at = (side - src.width) / 2
+
+        it.createGraphics().apply { drawImage(src, at, at, null); dispose() }
+    }
+
+    private fun round(src: BufferedImage, colour: Color) = canvas(src.width).also {
+        val side = src.width.toDouble()
+
+        quality(it.createGraphics()).apply {
+            color = Color.WHITE
+            fill(Ellipse2D.Double(0.0, 0.0, side, side))
+            composite = AlphaComposite.SrcAtop
+            color = colour
+            fillRect(0, 0, src.width, src.height)
+            drawImage(src, 0, 0, null)
+            dispose()
+        }
+    }
+
+    // White wherever the picture is, at the picture's own opacity: the system supplies the colour.
+    private fun monochrome(src: BufferedImage) = canvas(src.width).also {
+        for (y in 0 until src.height) for (x in 0 until src.width) {
+            val a = src.getRGB(x, y) ushr 24
+
+            it.setRGB(x, y, (a shl 24) or 0xFFFFFF)
+        }
+    }
+
+    private fun write(img: BufferedImage, f: File) {
+        val plain = BufferedImage(img.width, img.height, BufferedImage.TYPE_INT_ARGB)
+
+        plain.createGraphics().apply { drawImage(img, 0, 0, null); dispose() }
+        ImageIO.write(plain, "png", f)
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        val task = tasks.register<GeneratedManifest>("${variant.name}GeneratedManifest") {
+            lines.set(permissionLines + iconLines)
+        }
+
+        variant.sources.manifests.addGeneratedManifestFile(task, GeneratedManifest::manifest)
+
+        if (iconFile != null) {
+            val icon = tasks.register<LauncherIcon>("${variant.name}LauncherIcon") {
+                source.set(iconFile)
+                background.set(iconBackgroundProp)
+            }
+
+            variant.sources.res?.addGeneratedSourceDirectory(icon, LauncherIcon::res)
+        }
     }
 }
 
