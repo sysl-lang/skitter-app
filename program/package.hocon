@@ -20,7 +20,7 @@ package {
 //
 //     syslui-sdl { git = "github.com/sysl-lang/syslui-sdl", version = "0.2.5" }
 dependencies {
-  skitter { git = "github.com/sysl-lang/skitter", version = "0.3.2" }
+  skitter { git = "github.com/sysl-lang/skitter", version = "0.3.3" }
 }
 
 // What SDL3 itself requires, restated because a program reaching a gated module has to say so too.

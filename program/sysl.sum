@@ -1,4 +1,6 @@
 github.com/sysl-lang/parsing v0.13.0 sha256:d392b5d4449238ba518b59699b211298d7b33dc8f4abe78de8bfda57ac61e065
 github.com/sysl-lang/sdl3 v0.3.6 sha256:b0e094232e35075c641427e1e46b5f6924b16322b6fa52e0cbf9b47e77a357f2
 github.com/sysl-lang/skitter v0.3.2 sha256:5802f445329160c964305b0702a36389f1df537f5fa5739e06d37b3d4487b1dc
+github.com/sysl-lang/skitter v0.3.3 sha256:d4ee7baa2e378d56aca08a66b7c5ac979726ee2ea3cf15f80b64eec2dfac0502
 github.com/sysl-lang/toml v0.1.2 sha256:2ee4aec9be1c82941c0abe71cd4bdd61d42e26d5ad95a2049452a44f73e9fc9a
+github.com/sysl-lang/toml v0.1.3 sha256:a9f5747a5d2846dbd0e0d6a0f5313b4c7b558c1d6ab6e4680ba396b075df435a
