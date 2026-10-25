@@ -66,9 +66,9 @@ belongs in a repository is something a person can read.
 **Android Studio uses its own bundled JDK** and is unaffected by the version rule; a terminal whose
 `java` is newer needs `JAVA_HOME=<a jdk 17-25> ./gradlew assembleDebug`.
 
-**It needs sysl 0.0.161 or newer**, which is Skitter 0.3.0's floor. 0.0.61 was the first that knew
+**It needs sysl 0.6.0 or newer**, which is `program/sysl.hocon`'s floor. 0.0.61 was the first that knew
 `aarch64-android` and 0.0.73 the first with transitive imports, which is what lets
-`program/package.hocon` name one coordinate.
+`program/sysl.hocon` name one coordinate.
 `sysl targets` lists what a compiler has; if `aarch64-android` is not among them, the build stops at
 `unknown target` and no amount of Android configuration will help.
 
@@ -92,7 +92,7 @@ That is the demonstration, and it is deliberately small enough to delete.
 |---|---|
 | **`gradle.properties`** | your application id and its name. **Two lines** — and one more each if you want more of SDL, a permission, an icon, a fixed orientation or coloured bars |
 | **`program/main.sysl`** | your program |
-| **`program/package.hocon`** | what your program depends on, and its version — which is the app's |
+| **`program/sysl.hocon`** | what your program depends on, and its version — which is the app's |
 | everything else | Skitter's machinery — leave it |
 
 ### Logging
@@ -214,7 +214,7 @@ draws behind the bars. Empty, the default, generates nothing.
 
 ### The version
 
-The version is not a line in `gradle.properties`: it is `version` in `program/package.hocon`, which
+The version is not a line in `gradle.properties`: it is `version` in `program/sysl.hocon`, which
 your program reads as `__VERSION__`, so the screen and the system's app info cannot disagree.
 Android's `versionCode` is derived from it — `MAJOR × 1000000 + MINOR × 1000 + PATCH`, so 1.2.3 is
 1002003 — which keeps it going up whenever the version does, with no second number to forget. A
@@ -263,7 +263,7 @@ The bundle carries `arm64-v8a` only (see [One ABI](#one-abi)). Play requires tha
 with native code and accepts a bundle that has nothing else. A 32-bit-only or x86 device simply will
 not be offered the app.
 
-**The version code** comes from `program/package.hocon` (see [The version](#the-version)). Play
+**The version code** comes from `program/sysl.hocon` (see [The version](#the-version)). Play
 refuses an upload whose code is not higher than the last one, so bump `version` before each upload.
 
 **The target API level.** Play refuses new apps and updates whose `targetSdk` is below its yearly
@@ -288,7 +288,7 @@ is a string nothing else reads.
 ## Adding an interface
 
 The starter draws with SDL directly, which keeps it small. For real controls, add syslUI's driver to
-`program/package.hocon` — one coordinate, because imports are transitive:
+`program/sysl.hocon` — one coordinate, because imports are transitive:
 
 ```
 dependencies {

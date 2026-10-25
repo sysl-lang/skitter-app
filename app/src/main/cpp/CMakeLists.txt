@@ -27,10 +27,10 @@ set(SYSL_TARGET aarch64-android)
 set(SYSL_ARCHIVE ${CMAKE_CURRENT_BINARY_DIR}/libskitterapp.a)
 
 # Your program. A fixed directory, so that this file never has to change: `program/` beside the
-# Gradle build, holding `main.sysl` and `package.hocon`.
+# Gradle build, holding `main.sysl` and `sysl.hocon`.
 set(SYSL_PROGRAM ${CMAKE_CURRENT_SOURCE_DIR}/../../../../program)
 
-# **Skitter and SDL3 are coordinates, so there is nothing to point at.** `program/package.hocon`
+# **Skitter and SDL3 are coordinates, so there is nothing to point at.** `program/sysl.hocon`
 # names Skitter and `sysl build-c` fetches it, along with SDL3, which it brings with it because
 # imports are transitive as of sysl 0.0.73. There is no `--lib` and no `file(GLOB)` of somebody
 # else's sources, which is what a version buys: a build cannot be stale against a coordinate.
@@ -114,6 +114,13 @@ endforeach()
 # noticed as well as one edited. `sysl.sum` is in it because a changed lock is a changed dependency.
 file(GLOB_RECURSE SYSL_SOURCES CONFIGURE_DEPENDS ${SYSL_PROGRAM}/*.sysl)
 
+# The manifest is `sysl.hocon`; a project generated before sysl 0.6.0 still has `package.hocon`.
+if(EXISTS ${SYSL_PROGRAM}/sysl.hocon)
+    set(SYSL_MANIFEST ${SYSL_PROGRAM}/sysl.hocon)
+else()
+    set(SYSL_MANIFEST ${SYSL_PROGRAM}/package.hocon)
+endif()
+
 add_custom_command(
     OUTPUT ${SYSL_ARCHIVE}
     COMMAND ${CMAKE_COMMAND} -E env ANDROID_NDK_ROOT=${ANDROID_NDK}
@@ -123,7 +130,7 @@ add_custom_command(
             --link-path ${SDL3_LIB_DIR}
             ${SYSL_EXTRA_ARGS}
             -o ${SYSL_ARCHIVE}
-    DEPENDS ${SYSL_SOURCES} ${SYSL_PROGRAM}/package.hocon ${SYSL_PROGRAM}/sysl.sum
+    DEPENDS ${SYSL_SOURCES} ${SYSL_MANIFEST} ${SYSL_PROGRAM}/sysl.sum
     COMMENT "Compiling your sysl program for ${SYSL_TARGET}"
     VERBATIM)
 

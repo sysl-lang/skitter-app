@@ -180,13 +180,18 @@ val barIconsDark: Boolean = barColorProp.isNotEmpty() && run {
     l > 0.179
 }
 
-// **The version, read from `program/package.hocon`** — the line `__VERSION__` reads, so the screen
+// **The manifest is `program/sysl.hocon`**; a project generated before sysl 0.6.0 still has
+// `program/package.hocon`, which is read when there is no `sysl.hocon`.
+val programManifest: File = rootProject.file("program/sysl.hocon").takeIf { it.exists() }
+    ?: rootProject.file("program/package.hocon")
+
+// **The version, read from the manifest** — the line `__VERSION__` reads, so the screen
 // and the system's app info cannot disagree. Only the package's own `version` starts a line; a
 // dependency's sits inside its braces, after the name.
 val programVersion: String = Regex("""^\s*version\s*=\s*"([^"]+)"""", RegexOption.MULTILINE)
-    .find(rootProject.file("program/package.hocon").readText())
+    .find(programManifest.readText())
     ?.groupValues?.get(1)
-    ?: throw GradleException("program/package.hocon declares no version, and the app's version is read from it")
+    ?: throw GradleException("${programManifest.name} declares no version, and the app's version is read from it")
 
 // **`versionCode` is derived from the same line**: `MAJOR.MINOR.PATCH` becomes
 // `MAJOR × 1 000 000 + MINOR × 1 000 + PATCH`, so 0.1.0 is 1000 and 1.2.3 is 1002003. A second line to
@@ -198,7 +203,7 @@ val programVersion: String = Regex("""^\s*version\s*=\s*"([^"]+)"""", RegexOptio
 val programVersionCode: Int = run {
     val parts = Regex("""(\d+)\.(\d+)\.(\d+)""").matchEntire(programVersion)?.groupValues?.drop(1)?.map { it.toInt() }
         ?: throw GradleException(
-            "program/package.hocon: version '$programVersion' is not MAJOR.MINOR.PATCH, and Android's " +
+            "${programManifest.name}: version '$programVersion' is not MAJOR.MINOR.PATCH, and Android's " +
                 "versionCode is derived from those three numbers",
         )
 
@@ -206,7 +211,7 @@ val programVersionCode: Int = run {
 
     if (minor >= 1000 || patch >= 1000 || major > 2099) {
         throw GradleException(
-            "program/package.hocon: version '$programVersion' cannot become a versionCode that keeps going " +
+            "${programManifest.name}: version '$programVersion' cannot become a versionCode that keeps going " +
                 "up — MINOR and PATCH must be below 1000 and MAJOR at most 2099",
         )
     }
@@ -304,7 +309,7 @@ android {
         minSdk = 26
         targetSdk = 36
 
-        // **Both from `program/package.hocon`'s `version`**, which is the one number to bump when you
+        // **Both from `program/sysl.hocon`'s `version`**, which is the one number to bump when you
         // ship — see `programVersionCode` above for how the code is derived and why it only goes up.
         versionCode = programVersionCode
         versionName = programVersion
