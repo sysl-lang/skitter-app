@@ -71,7 +71,7 @@ sdl_main_body() -> i32
         // through a wall.** The elapsed time across a pause is however long somebody was reading
         // their messages, and a single step that long moves further than the box is wide.
         val now = ticks()
-        val dt = min(f32(now - last) / 1000.0, 0.05f32)
+        val dt = (f32(now - last) / 1000.0).min(0.05)
 
         last = now
 
