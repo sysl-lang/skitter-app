@@ -147,6 +147,7 @@ skitter.permissions=microphone
 | `internet` | `INTERNET` |
 | `bluetooth` | `BLUETOOTH_CONNECT`, and `BLUETOOTH` up to Android 11, where the permission was split |
 | `vibrate` | `VIBRATE` — always granted already |
+| `discovery` | `INTERNET`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE` and `NEARBY_WIFI_DEVICES` — what `sh.sysl.skitter.discover` needs to find a service on the local network |
 
 Anything else is written in Android's own spelling, `android.permission.WAKE_LOCK`, and passed through;
 a short name the table does not know stops the build and lists the ones it does. The build writes

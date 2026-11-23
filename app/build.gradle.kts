@@ -43,6 +43,15 @@ val permissionTable = mapOf(
         "android.permission.BLUETOOTH_CONNECT" to null,
     ),
     "vibrate" to listOf("android.permission.VIBRATE" to null),
+    // What `sh.sysl.skitter.discover` needs: the network itself, the Wi-Fi state `NsdManager` reads,
+    // the multicast lock the activity holds while it browses, and — from Android 13 — the nearby
+    // Wi-Fi devices permission some phones ask of an app that browses the local network.
+    "discovery" to listOf(
+        "android.permission.INTERNET" to null,
+        "android.permission.ACCESS_WIFI_STATE" to null,
+        "android.permission.CHANGE_WIFI_MULTICAST_STATE" to null,
+        "android.permission.NEARBY_WIFI_DEVICES" to null,
+    ),
 )
 
 // **Resolved here, while Gradle is configuring**, so a misspelt name stops the build before anything

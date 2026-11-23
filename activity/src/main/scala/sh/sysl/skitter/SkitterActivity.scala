@@ -2,7 +2,12 @@ package sh.sysl.skitter
 
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.nsd.{NsdManager, NsdServiceInfo}
+import android.net.wifi.WifiManager
 import android.os.{Build, Bundle, VibrationEffect, Vibrator, VibratorManager}
+import java.net.{Inet4Address, InetAddress}
+import java.nio.charset.StandardCharsets
+import scala.jdk.CollectionConverters.*
 import android.util.Log
 import android.view.{View, WindowInsets}
 import org.libsdl.app.SDLActivity
@@ -61,6 +66,15 @@ class SkitterActivity extends SDLActivity:
     * waiting is recognised as stale rather than read as the answer to the next question.
     */
   @native def nativePermissionAnswer(answer: Int): Unit
+
+  /** What discovery learns, defined in sysl by `discover.sysl` under the same naming rule. '''The
+    * strings cross as UTF-8 byte arrays''', not as `String`: JNI reads a `jstring` back as modified
+    * UTF-8, which splits a character outside the Basic Multilingual Plane into two surrogates — an
+    * emoji in a computer's name would arrive as six bytes that are not UTF-8.
+    */
+  @native def nativeServiceFound(name: Array[Byte], host: Array[Byte], port: Int): Unit
+  @native def nativeServiceLost(name: Array[Byte]): Unit
+  @native def nativeDiscoveryFailed(code: Int): Unit
 
   override def onCreate(savedInstanceState: Bundle): Unit =
     super.onCreate(savedInstanceState)
@@ -129,6 +143,8 @@ class SkitterActivity extends SDLActivity:
       case SkitterActivity.Tick => tick(); true
       case SkitterActivity.Share => share(); true
       case SkitterActivity.CheckPermission => answerPermission(n); true
+      case SkitterActivity.Discover => discover(); true
+      case SkitterActivity.StopDiscovery => stopDiscovery(); true
       case _ => super.onUnhandledMessage(command, param)
 
   private def vibrator: Option[Vibrator] =
@@ -169,6 +185,10 @@ class SkitterActivity extends SDLActivity:
     val asked =
       if permission == "android.permission.BLUETOOTH_CONNECT" && Build.VERSION.SDK_INT < Build.VERSION_CODES.S
       then "android.permission.BLUETOOTH"
+      // Likewise `NEARBY_WIFI_DEVICES` before Android 13, where browsing needed only the Wi-Fi
+      // state, granted at install.
+      else if permission == "android.permission.NEARBY_WIFI_DEVICES" && Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+      then "android.permission.ACCESS_WIFI_STATE"
       else permission
 
     checkSelfPermission(asked) == PackageManager.PERMISSION_GRANTED
@@ -179,12 +199,121 @@ class SkitterActivity extends SDLActivity:
 
     nativePermissionAnswer(token * 2 + (if yes then 1 else 0))
 
+  // ## Discovery
+  //
+  // **`NsdManager` browses and resolves; this keeps the multicast lock while it does.** A phone's
+  // Wi-Fi filters multicast to save power, and on some phones that filters the mDNS answers too, so
+  // the lock is held from `discover` to `stopDiscovery` — and given back when the activity is
+  // destroyed, since a held lock keeps the radio awake.
+  //
+  // Every callback here runs on `NsdManager`'s own thread or an executor's; the sysl side takes the
+  // reports behind a lock, so neither needs to come back to the UI thread first.
+
+  private var browsing: Option[NsdManager.DiscoveryListener] = None
+  private var multicast: Option[WifiManager#MulticastLock] = None
+  private var resolving: List[AnyRef] = Nil
+
+  private def nsd: NsdManager = getSystemService(classOf[NsdManager])
+
+  private def utf8(s: String): Array[Byte] =
+    if s == null then Array.emptyByteArray else s.getBytes(StandardCharsets.UTF_8)
+
+  private def discover(): Unit =
+    stopDiscovery()
+
+    val serviceType = SDLActivity.nativeGetHint(SkitterActivity.DiscoverTypeHint)
+
+    if serviceType != null && serviceType.nonEmpty then
+      val wifi = getApplicationContext.getSystemService(classOf[WifiManager])
+
+      if wifi != null then
+        val lock = wifi.createMulticastLock("skitter-discovery")
+
+        lock.setReferenceCounted(false)
+        lock.acquire()
+        multicast = Some(lock)
+
+      val listener = new NsdManager.DiscoveryListener:
+        def onDiscoveryStarted(serviceType: String): Unit = ()
+        def onDiscoveryStopped(serviceType: String): Unit = ()
+        def onStartDiscoveryFailed(serviceType: String, code: Int): Unit = nativeDiscoveryFailed(code)
+        def onStopDiscoveryFailed(serviceType: String, code: Int): Unit = nativeDiscoveryFailed(code)
+        def onServiceFound(info: NsdServiceInfo): Unit = resolve(info)
+        def onServiceLost(info: NsdServiceInfo): Unit = nativeServiceLost(utf8(info.getServiceName))
+
+      browsing = Some(listener)
+      nsd.discoverServices(serviceType, NsdManager.PROTOCOL_DNS_SD, listener)
+
+  private def stopDiscovery(): Unit =
+    browsing.foreach(l => try nsd.stopServiceDiscovery(l) catch case _: IllegalArgumentException => ())
+    browsing = None
+
+    if Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE then
+      resolving.foreach: c =>
+        try nsd.unregisterServiceInfoCallback(c.asInstanceOf[NsdManager.ServiceInfoCallback])
+        catch case _: IllegalArgumentException => ()
+
+    resolving = Nil
+    multicast.foreach(l => if l.isHeld then l.release())
+    multicast = None
+
+  override def onDestroy(): Unit =
+    stopDiscovery()
+    super.onDestroy()
+
+  // **The IPv4 address where there is one**: a Mac answers on both, and a listener bound to IPv4
+  // only — marshal's — would refuse the IPv6 one.
+  private def report(info: NsdServiceInfo, addresses: Seq[InetAddress]): Unit =
+    val chosen = addresses.find(_.isInstanceOf[Inet4Address]).orElse(addresses.headOption)
+
+    chosen.foreach: a =>
+      nativeServiceFound(utf8(info.getServiceName), utf8(a.getHostAddress), info.getPort)
+
+  // **Two ways to resolve, because Android 14 replaced the first.** `resolveService` takes one
+  // service at a time — a second while one is in flight fails with `FAILURE_ALREADY_ACTIVE` — so
+  // before 14 they are queued; from 14 a service-info callback follows each one, and also reports a
+  // new address when the Mac moves.
+  private def resolve(info: NsdServiceInfo): Unit =
+    if Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE then
+      val callback = new NsdManager.ServiceInfoCallback:
+        def onServiceInfoCallbackRegistrationFailed(code: Int): Unit = nativeDiscoveryFailed(code)
+        def onServiceUpdated(updated: NsdServiceInfo): Unit =
+          report(updated, updated.getHostAddresses.asScala.toSeq)
+        def onServiceLost(): Unit = nativeServiceLost(utf8(info.getServiceName))
+        def onServiceInfoCallbackUnregistered(): Unit = ()
+
+      resolving = callback :: resolving
+      nsd.registerServiceInfoCallback(info, getMainExecutor, callback)
+    else
+      queued.synchronized:
+        queued.enqueue(info)
+        if queued.size == 1 then resolveNext()
+
+  private val queued = scala.collection.mutable.Queue.empty[NsdServiceInfo]
+
+  @annotation.nowarn("cat=deprecation")
+  private def resolveNext(): Unit =
+    queued.synchronized(queued.headOption).foreach: info =>
+      nsd.resolveService(info, new NsdManager.ResolveListener:
+        def onResolveFailed(failed: NsdServiceInfo, code: Int): Unit = next()
+        def onServiceResolved(resolved: NsdServiceInfo): Unit =
+          report(resolved, Option(resolved.getHost).toSeq)
+          next()
+      )
+
+  private def next(): Unit =
+    queued.synchronized(if queued.nonEmpty then queued.dequeue())
+    resolveNext()
+
 object SkitterActivity:
   // `phone.sysl`'s command numbers and hint names. The two files are Skitter's, and change together.
   final val Vibrate = 0x8001
   final val Tick = 0x8002
   final val Share = 0x8003
   final val CheckPermission = 0x8004
+  final val Discover = 0x8005
+  final val StopDiscovery = 0x8006
 
   final val ShareTextHint = "SKITTER_SHARE_TEXT"
   final val PermissionHint = "SKITTER_PERMISSION"
+  final val DiscoverTypeHint = "SKITTER_DISCOVER_TYPE"
